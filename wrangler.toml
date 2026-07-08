@@ -1,0 +1,14 @@
+name = "wps-import-site"
+compatibility_date = "2024-12-01"
+pages_build_output_dir = "public"
+
+# D1 数据库绑定 — 部署后替换 database_id
+[[d1_databases]]
+binding = "DB"
+database_name = "wps-import-db"
+database_id = "2808169d-afaf-457d-a93a-d7f83b07ef1b"
+
+# KV 绑定 — 存储密码和站点设置
+[[kv_namespaces]]
+binding = "SITE_KV"
+id = "17a13e57cc4043ce9d4ee41686ec4606"

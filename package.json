@@ -1,0 +1,15 @@
+{
+  "name": "wps-import-site",
+  "version": "1.0.0",
+  "description": "WPS/金山文档在线表格数据导入工具 - 提交链接自动读取子表数据导入目标表格",
+  "scripts": {
+    "dev": "npx wrangler pages dev public --local --d1 DB=wps-import-db",
+    "deploy": "npx wrangler pages deploy public",
+    "db:create": "npx wrangler d1 create wps-import-db",
+    "db:init": "npx wrangler d1 execute wps-import-db --local --file=./schema.sql",
+    "db:init:remote": "npx wrangler d1 execute wps-import-db --remote --file=./schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

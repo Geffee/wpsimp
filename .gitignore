@@ -1,0 +1,10 @@
+node_modules/
+*.v20.bak
+.DS_Store
+thumbs.db
+*.swp
+*.swo
+.env.local
+.tmp/
+.wrangler/
+dist/
