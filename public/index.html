@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WPS表格导入工具</title>
+  <link rel="icon" id="favicon-link" href="data:," />
+  <link rel="stylesheet" href="/style.css?v=24">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand" id="nav-brand">
+      <img id="nav-logo-img" src="" alt="" style="display:none;height:24px;width:auto" />
+      <span class="nav-logo" id="nav-logo-emoji">📋</span>
+      <span class="nav-title" id="nav-title-text">WPS表格导入工具</span>
+    </div>
+    <div class="nav-links">
+      <a href="#/import" class="nav-link" data-page="import">导入</a>
+      <a href="#/config" class="nav-link" data-page="config">配置</a>
+    </div>
+    <div class="nav-user" id="nav-user">
+      <button id="btn-wps-login" class="btn btn-primary btn-small" onclick="wpsLogin()">WPS登录</button>
+      <div id="nav-user-info" style="display:none">
+        <img id="nav-user-avatar" class="nav-avatar" src="" alt="" />
+        <span id="nav-user-name" class="nav-user-name"></span>
+        <button class="btn btn-secondary btn-small" onclick="wpsLogout()">登出</button>
+      </div>
+      <a href="#/logs" id="nav-logs-link" class="nav-link nav-logs-link" data-page="logs" style="display:none">日志</a>
+      <a href="#/settings" class="nav-settings-icon" title="设置" data-page="settings">⚙️</a>
+    </div>
+  </nav>
+
+  <div id="demo-banner" class="demo-banner" style="display:none">
+    演示模式 — 数据为模拟数据。部署到 Cloudflare + 配置WPS 365企业自建应用后启用真实功能。
+  </div>
+
+  <main class="container">
+    <!-- 导入页 -->
+    <section id="page-import" class="page">
+      <h2>数据导入</h2>
+      <div id="login-required-banner" class="card login-required" style="display:none">
+        <div class="login-required-content">
+          <span class="login-required-icon">🔒</span>
+          <div>
+            <strong>需要WPS登录</strong>
+            <p>导入数据需要先登录WPS账号，系统将以您的账号权限写入目标表格。仅对目标表格有编辑权限的用户才能导入。</p>
+          </div>
+          <button class="btn btn-primary" onclick="wpsLogin()">WPS登录</button>
+        </div>
+      </div>
+      <div id="import-content" style="display:none">
+      <div class="card">
+        <div class="step">
+          <label class="step-label">1. 选择店铺</label>
+          <select id="import-shop" class="select">
+            <option value="">请选择店铺...</option>
+          </select>
+        </div>
+        <div class="step" id="import-upload-step" style="display:none">
+          <label class="step-label">2. 上传数据文件</label>
+          <div id="file-upload-area" class="file-upload-area">
+            <div class="file-upload-icon">📁</div>
+            <div class="file-upload-text">点击或拖拽文件到此处</div>
+            <div class="file-upload-hint">支持 .xlsx, .xls, .csv 格式</div>
+            <input type="file" id="import-file" accept=".xlsx,.xls,.csv" style="display:none">
+          </div>
+          <div id="file-info" class="file-info" style="display:none"></div>
+        </div>
+        <div id="import-config-preview" class="import-config-preview" style="display:none">
+          <!-- 上传文件后显示匹配的子表 -->
+        </div>
+        <div class="step" id="import-action-step" style="display:none">
+          <label class="step-label">3. 执行导入</label>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>导入时间（写入到配置的时间列）</label>
+            <div style="display:flex;gap:6px;align-items:center;max-width:340px">
+              <button type="button" class="btn btn-secondary btn-small" onclick="shiftImportTime(-1)" style="padding:6px 10px;font-size:16px;line-height:1">‹</button>
+              <input type="date" id="import-time" class="input" style="flex:1">
+              <button type="button" class="btn btn-secondary btn-small" onclick="shiftImportTime(1)" style="padding:6px 10px;font-size:16px;line-height:1">›</button>
+            </div>
+            <p class="hint">此日期会写入到每个表格类型配置的"时间列"中，格式如 2026/7/7，留空则不写入</p>
+          </div>
+          <div class="btn-row">
+            <button id="btn-import" class="btn btn-primary" disabled>开始导入</button>
+            <button id="btn-select-all" class="btn btn-secondary btn-small">全选</button>
+            <button id="btn-select-none" class="btn btn-secondary btn-small">取消全选</button>
+          </div>
+        </div>
+      </div>
+      <div id="import-result" class="import-result"></div>
+      </div>
+    </section>
+
+    <!-- 配置页（需要管理员密码） -->
+    <section id="page-config" class="page" style="display:none">
+      <div id="config-lock" class="card login-required" style="display:none">
+        <div class="login-required-content">
+          <span class="login-required-icon">🔐</span>
+          <div>
+            <strong>配置管理需要管理员密码</strong>
+            <p>请输入管理员密码以访问配置页面。</p>
+          </div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;align-items:center">
+          <input type="password" id="config-pwd-input" class="input" placeholder="管理员密码" style="flex:1;max-width:300px" onkeydown="if(event.key==='Enter')unlockConfig()">
+          <button class="btn btn-primary" onclick="unlockConfig()">解锁</button>
+        </div>
+      </div>
+      <div id="config-content" style="display:none">
+        <h2>配置管理</h2>
+        <div class="config-layout">
+          <div class="config-left">
+            <div class="card">
+              <div class="card-header">
+                <h3>店铺管理</h3>
+                <button class="btn btn-small btn-primary" onclick="addShop()">+ 添加</button>
+              </div>
+              <div id="shops-list" class="list"></div>
+            </div>
+          </div>
+          <div class="config-right">
+            <div id="config-detail" class="config-detail-empty">
+              <p>选择左侧店铺查看配置</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 设置页（需要开发人员密码） -->
+    <section id="page-settings" class="page" style="display:none">
+      <div id="settings-lock" class="card login-required" style="display:none">
+        <div class="login-required-content">
+          <span class="login-required-icon">🔐</span>
+          <div>
+            <strong>系统设置需要开发人员密码</strong>
+            <p>请输入开发人员密码以访问设置页面。</p>
+          </div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;align-items:center">
+          <input type="password" id="settings-pwd-input" class="input" placeholder="开发人员密码" style="flex:1;max-width:300px" onkeydown="if(event.key==='Enter')unlockSettings()">
+          <button class="btn btn-primary" onclick="unlockSettings()">解锁</button>
+        </div>
+      </div>
+      <div id="settings-content" style="display:none">
+        <h2>系统设置</h2>
+
+        <!-- 站点外观设置 -->
+        <div class="card">
+          <h3>站点外观</h3>
+          <div class="form-group">
+            <label>Favicon 图标 URL</label>
+            <input type="text" id="setting-favicon" class="input" placeholder="如 https://example.com/favicon.ico">
+            <p class="hint">留空则使用默认图标</p>
+          </div>
+          <div class="form-group">
+            <label>页面标题（Title）</label>
+            <input type="text" id="setting-title" class="input" placeholder="浏览器标签页显示的标题">
+          </div>
+          <div class="form-row" style="display:flex;gap:16px">
+            <div class="form-group" style="flex:1">
+              <label>Header Logo 图片 URL</label>
+              <input type="text" id="setting-logo-url" class="input" placeholder="如 https://example.com/logo.png">
+              <p class="hint">留空则显示默认图标 📋</p>
+            </div>
+            <div class="form-group" style="flex:0 0 120px">
+              <label>Logo 尺寸 (px)</label>
+              <input type="number" id="setting-logo-size" class="input" value="24" min="12" max="80">
+            </div>
+          </div>
+          <div class="form-row" style="display:flex;gap:16px">
+            <div class="form-group" style="flex:1">
+              <label>Header 文本</label>
+              <input type="text" id="setting-logo-text" class="input" placeholder="导航栏右侧显示的文字">
+            </div>
+            <div class="form-group" style="flex:0 0 120px">
+              <label>文本字号 (px)</label>
+              <input type="number" id="setting-logo-font-size" class="input" value="16" min="10" max="40">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>文本字体</label>
+            <select id="setting-logo-font" class="select">
+              <option value="system-ui, -apple-system, sans-serif">系统默认</option>
+              <option value="'Microsoft YaHei', sans-serif">微软雅黑</option>
+              <option value="'SimHei', sans-serif">黑体</option>
+              <option value="'SimSun', serif">宋体</option>
+              <option value="'KaiTi', serif">楷体</option>
+              <option value="Arial, sans-serif">Arial</option>
+              <option value="Georgia, serif">Georgia</option>
+              <option value="'Courier New', monospace">Courier New</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="saveSiteSettings()">保存外观设置</button>
+        </div>
+
+        <!-- 密码管理 -->
+        <div class="card">
+          <h3>密码管理</h3>
+          <div class="form-row" style="display:flex;gap:16px">
+            <div class="form-group" style="flex:1">
+              <label>管理员密码（配置页）</label>
+              <div style="display:flex;gap:8px">
+                <input type="password" id="pwd-admin-old" class="input" placeholder="原密码">
+                <input type="password" id="pwd-admin-new" class="input" placeholder="新密码">
+                <button class="btn btn-secondary btn-small" onclick="updatePassword('admin')">修改</button>
+              </div>
+            </div>
+          </div>
+          <div class="form-row" style="display:flex;gap:16px">
+            <div class="form-group" style="flex:1">
+              <label>开发人员密码（设置页）</label>
+              <div style="display:flex;gap:8px">
+                <input type="password" id="pwd-developer-old" class="input" placeholder="原密码">
+                <input type="password" id="pwd-developer-new" class="input" placeholder="新密码">
+                <button class="btn btn-secondary btn-small" onclick="updatePassword('developer')">修改</button>
+              </div>
+            </div>
+          </div>
+          <p class="hint">默认密码均为 admin，请及时修改</p>
+        </div>
+
+        <!-- WPS 365 企业自建应用凭证 -->
+        <div class="card">
+          <h3>WPS 365 企业自建应用凭证</h3>
+          <p class="hint">在 <a href="https://open.wps.cn/developer/home" target="_blank">WPS开放平台开发者后台</a> 创建企业自建应用，获取 APPID 和 APPKEY。<br>需在「权限申请」中申请 <code>kso.sheets.read</code> 或 <code>kso.sheets.readwrite</code> 权限，并在「版本管理」中发布版本。</p>
+          <div class="form-group">
+            <label>App ID (APPID)</label>
+            <input type="text" id="setting-app-id" class="input" placeholder="应用的 APPID">
+          </div>
+          <div class="form-group">
+            <label>App Key (APPKEY)</label>
+            <input type="text" id="setting-app-key" class="input" placeholder="应用的 APPKEY">
+          </div>
+          <button id="btn-save-settings" class="btn btn-primary">保存并连接</button>
+        </div>
+        <div class="card">
+          <h3>用户授权回调地址</h3>
+          <p class="hint">在 WPS开放平台开发者后台 > 安全配置 > 用户授权回调配置 中，添加以下回调地址：<br><code id="callback-url" style="user-select:all"></code></p>
+        </div>
+        <div class="card">
+          <h3>连接状态</h3>
+          <div id="auth-status" class="auth-status"></div>
+          <div class="btn-row">
+            <button id="btn-authorize" class="btn btn-primary">测试连接</button>
+            <button id="btn-refresh-token" class="btn btn-secondary">刷新Token</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 日志页 -->
+    <section id="page-logs" class="page" style="display:none">
+      <h2>导入日志</h2>
+      <div class="card">
+        <button class="btn btn-secondary btn-small" onclick="loadLogs()">刷新</button>
+        <div id="logs-table" class="logs-table"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 弹窗 -->
+  <div id="modal-overlay" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <!-- 通知 -->
+  <div id="toast" class="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="/app.js?v=24"></script>
+</body>
+</html>
