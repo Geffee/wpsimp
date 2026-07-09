@@ -2,6 +2,11 @@ name = "wpsimpmoyu2"
 compatibility_date = "2024-12-01"
 pages_build_output_dir = "public"
 
+# 提高单次 Worker 调用的子请求上限（大表分块导入时仍有帮助；免费档会被钳制在50，前端已做分块兜底）
+[limits]
+cpu_ms = 100
+subrequests = 1000
+
 # D1 数据库绑定 — 独立新库（原 wps-import-db 的拷贝）
 [[d1_databases]]
 binding = "DB"

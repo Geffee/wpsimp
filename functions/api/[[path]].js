@@ -272,8 +272,8 @@ async function readSheetData(env, fileId, worksheetIdOrIdx, maxRows = 5000, maxC
 /**
  * 找到目标表格最后一个有数据的行号
  * 只扫描指定的 scanCol 列，找到该列最后一个非空单元格
- * maxRow 来自 WPS API 的 max_row（WPS 表格的逻辑总行数，可超过 10000）
- * 按 BATCH_ROWS 分批循环读取，避免单次请求过大导致 API 返回空
+ * maxRow 来自 WPS API 的 max_row（可能不准确，仅作参考）
+ * 按 BATCH_ROWS 分批循环读取，自动扩展扫描范围直到找到真正的末行
  */
 async function findLastRow(env, fileId, sheetId, maxRow, scanCol, token = null) {
   let accessToken = token;
@@ -286,7 +286,7 @@ async function findLastRow(env, fileId, sheetId, maxRow, scanCol, token = null) 
   // 起始扫描上限：maxRow 可能偏低（如旧表格返回 16384），至少扫 50000 行
   // 如果扫描到边界仍有数据，会自动向下扩展
   let readRowTo = Math.max(maxRow || 0, 50000);
-  const BATCH_ROWS = 2000; // 每批最多2000行
+  const BATCH_ROWS = 50000; // 每批最多5万行，减少大表扫描的子请求数（避免分块导入时单块扫全表爆50上限）
   let lastRow = -1;
 
   while (true) {
@@ -763,7 +763,11 @@ async function handleImport(request, env) {
   }
 
   const body = await request.json();
-  const { shop_id, items, import_time } = body;
+  const { shop_id, items, import_time, row_offset } = body;
+  // 分块导入时的行偏移：固定起始行模式下，第 N 块在 startRowCfg 基础上再加该偏移，避免重叠
+  const baseRowOffset = parseInt(row_offset) || 0;
+  // 分块序号：仅第 1 块（或未分块时=0）写导入日志，避免分块产生多条日志
+  const chunkIndex = parseInt(body.chunk_index) || 0;
 
   if (!shop_id) return json({ error: '请选择店铺' }, 400);
   if (!items || !Array.isArray(items) || items.length === 0) {
@@ -882,7 +886,8 @@ async function handleImport(request, env) {
       // 确定写入起始行：start_row >= 0 时用固定位置，否则自动找末行追加
       let startRow;
       if (startRowCfg >= 0) {
-        startRow = startRowCfg;
+        // 固定起始行 + 分块偏移（仅固定模式需要，避免分块重叠）
+        startRow = startRowCfg + baseRowOffset;
       } else {
         const lastRow = await findLastRow(env, targetFileId, targetSheetId, targetMaxRow, startCol, tenantToken);
         startRow = lastRow + 1;
@@ -962,10 +967,12 @@ async function handleImport(request, env) {
         last_row: startRow + importedRows - 1,
       });
 
-      // 记录日志（含操作人身份）
-      await env.DB.prepare(
-        'INSERT INTO import_logs (shop_id, table_type_id, source_file_token, rows_imported, status, message) VALUES (?, ?, ?, ?, ?, ?)'
-      ).bind(shop_id, tt.id, `upload:${mapping.source_sheet_name || mapping.source_sheet_idx}`, importedRows, 'success', `导入${importedRows}行 | 操作人: ${userToken.name}`).run();
+      // 记录日志（含操作人身份）；分块导入时仅首块写一条，避免刷屏
+      if (chunkIndex <= 1) {
+        await env.DB.prepare(
+          'INSERT INTO import_logs (shop_id, table_type_id, source_file_token, rows_imported, status, message) VALUES (?, ?, ?, ?, ?, ?)'
+        ).bind(shop_id, tt.id, `upload:${mapping.source_sheet_name || mapping.source_sheet_idx}`, importedRows, 'success', `导入${importedRows}行 | 操作人: ${userToken.name}`).run();
+      }
 
     } catch (e) {
       results.push({

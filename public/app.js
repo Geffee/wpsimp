@@ -672,60 +672,113 @@ document.getElementById('btn-import').addEventListener('click', async () => {
   const checked = Array.from(document.querySelectorAll('.import-check:checked'));
   if (checked.length === 0) { toast('请选择要导入的子表', 'error'); return; }
 
-  // 从 importState.importItems 收集选中的导入项
-  const items = checked.map(cb => {
+  // 从 importState.importItems 收集选中的导入项（每项含全部 dataRows）
+  const allItems = checked.map(cb => {
     const idx = parseInt(cb.value);
     const item = importState.importItems[idx];
     return {
       mapping_id: item.mapping_id,
       headers: item.headers,
       dataRows: item.dataRows,
-      source_sheet_idx: item.sourceSheetIdx, // 传给后端，让后端用此 idx 写目标表的对应子表
-      table_type: item.tableType ? {
-        id: item.tableType.id,
-        name: item.tableType.name,
-      } : null,
+      source_sheet_idx: item.sourceSheetIdx,
+      table_type: item.tableType ? { id: item.tableType.id, name: item.tableType.name } : null,
     };
   });
 
   const btn = document.getElementById('btn-import');
   btn.textContent = '导入中...';
   btn.disabled = true;
-  document.getElementById('import-result').innerHTML = '<div class="loading">正在导入数据，请稍候...</div>';
+  const resultEl = document.getElementById('import-result');
+  resultEl.innerHTML = '<div class="loading">正在准备导入任务...</div>';
 
   // 获取导入时间
   const importTime = document.getElementById('import-time')?.value || '';
 
-  try {
-    const result = await api('import', {
-      method: 'POST',
-      body: {
-        shop_id: parseInt(importState.shopId),
-        items,
-        import_time: importTime,
-      },
-    });
+  // 预计算分块计划：按列数动态决定每块行数，确保单次调用的子请求数 < 50（Cloudflare 免费档上限）
+  // 后端每批最多写 2000 个单元格；单块控制在 ~30 批以内，加上 findLastRow/获取子表等约 5 次，合计 < 50
+  const tasks = [];
+  for (const it of allItems) {
+    const rows = it.dataRows || [];
+    let colCount = (it.headers || []).length;
+    for (const r of rows) if (r.length > colCount) colCount = r.length;
+    const rowsPerBatch = Math.max(1, Math.floor(2000 / Math.max(1, colCount + 1)));
+    const chunkRows = Math.max(1, rowsPerBatch * 30); // 单块约 30 批
+    const totalChunks = Math.max(1, Math.ceil(rows.length / chunkRows));
+    for (let c = 0; c < totalChunks; c++) {
+      const start = c * chunkRows;
+      const end = Math.min(start + chunkRows, rows.length);
+      tasks.push({
+        item: { ...it, dataRows: rows.slice(start, end) },
+        row_offset: start,          // 固定起始行模式下用于避免分块重叠
+        chunk_index: c + 1,
+        total_chunks: totalChunks,
+      });
+    }
+  }
 
+  // 按 item 聚合结果
+  const byItem = {};
+  let done = 0;
+
+  try {
+    for (const t of tasks) {
+      done++;
+      resultEl.innerHTML = `<div class="loading">正在导入数据... (${done}/${tasks.length})</div>`;
+      try {
+        const result = await api('import', {
+          method: 'POST',
+          body: {
+            shop_id: parseInt(importState.shopId),
+            items: [t.item],
+            import_time: importTime,
+            row_offset: t.row_offset,
+            chunk_index: t.chunk_index,
+          },
+        });
+        (result.results || []).forEach(r => {
+          const key = r.table_type || r.mapping_id || '-';
+          if (!byItem[key]) byItem[key] = { key, sheet: r.sheet, rows: 0, status: r.status, msg: '', start: null, last: null };
+          const agg = byItem[key];
+          agg.rows += (r.rows_imported || 0);
+          if (r.status === 'error') agg.status = 'error';
+          if (r.message && !agg.msg) agg.msg = r.message;
+          if (r.start_row != null) {
+            if (agg.start == null || r.start_row < agg.start) agg.start = r.start_row;
+            if (agg.last == null || r.last_row > agg.last) agg.last = r.last_row;
+          }
+        });
+      } catch (e) {
+        const key = t.item.table_type?.name || t.item.mapping_id || '-';
+        if (!byItem[key]) byItem[key] = { key, sheet: '', rows: 0, status: 'error', msg: '', start: null, last: null };
+        byItem[key].status = 'error';
+        if (!byItem[key].msg) byItem[key].msg = (e.message || '网络错误') + ` (分块 ${t.chunk_index}/${t.total_chunks})`;
+      }
+    }
+
+    // 汇总展示
     let html = '<h3>导入结果</h3>';
-    if (result.results && result.results.length > 0) {
-      result.results.forEach(r => {
+    const keys = Object.keys(byItem);
+    if (keys.length) {
+      keys.forEach(key => {
+        const r = byItem[key];
         const cls = r.status;
         const statusText = { success: '成功', error: '失败', skipped: '跳过' }[r.status] || r.status;
         html += `<div class="result-item ${cls}">
-          <div>
-            <strong>${esc(r.table_type || r.mapping_id || '-')}</strong>
-            ${r.sheet ? ' / ' + esc(r.sheet) : ''}
-          </div>
-          <div class="result-status ${cls}">${statusText}${r.rows_imported != null ? ' (' + r.rows_imported + '行)' : ''}</div>
+          <div><strong>${esc(r.key)}</strong>${r.sheet ? ' / ' + esc(r.sheet) : ''}</div>
+          <div class="result-status ${cls}">${statusText}${r.rows != null ? ' (' + r.rows + '行)' : ''}</div>
         </div>`;
-        if (r.start_row != null) html += `<div class="result-msg ${cls}">数据从第 ${r.start_row + 1} 行开始写入（检测到末行: ${r.last_row + 1}）</div>`;
-        if (r.message) html += `<div class="result-msg ${cls}">${esc(r.message)}</div>`;
+        if (r.start != null) html += `<div class="result-msg ${cls}">数据从第 ${r.start + 1} 行开始写入（末行: ${r.last + 1}）</div>`;
+        if (r.msg) html += `<div class="result-msg ${cls}">${esc(r.msg)}</div>`;
       });
     } else {
       html += '<div class="empty">无导入结果</div>';
     }
-    document.getElementById('import-result').innerHTML = html;
-    if (result.ok) toast('导入完成', 'success');
+    resultEl.innerHTML = html;
+
+    const successRows = keys.reduce((s, k) => s + (byItem[k].rows || 0), 0);
+    const hasError = keys.some(k => byItem[k].status === 'error');
+    if (hasError) toast(`导入完成，成功 ${successRows} 行，部分分块失败`, 'error');
+    else toast(`导入完成，成功写入 ${successRows} 行`, 'success');
   } catch (e) {
     // 检查是否需要登录
     if (e.message && e.message.includes('登录')) {
@@ -733,7 +786,7 @@ document.getElementById('btn-import').addEventListener('click', async () => {
       updateLoginUI();
       toast('登录已过期，请重新登录', 'error');
     }
-    document.getElementById('import-result').innerHTML = `<div class="result-item error"><div>${esc(e.message)}</div></div>`;
+    resultEl.innerHTML = `<div class="result-item error"><div>${esc(e.message)}</div></div>`;
     toast('导入失败: ' + e.message, 'error');
   } finally {
     updateImportButton();
