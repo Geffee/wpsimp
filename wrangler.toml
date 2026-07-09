@@ -1,0 +1,14 @@
+name = "wpsimpmoyu2"
+compatibility_date = "2024-12-01"
+pages_build_output_dir = "public"
+
+# D1 数据库绑定 — 独立新库（原 wps-import-db 的拷贝）
+[[d1_databases]]
+binding = "DB"
+database_name = "wpsimpmoyu2-db"
+database_id = "f8d81afc-8115-4459-8e77-c13e77c2343d"
+
+# KV 绑定 — 独立新 KV（原 SITE_KV 的拷贝）
+[[kv_namespaces]]
+binding = "SITE_KV"
+id = "ba72219c3286432daec7f53386379e86"
