@@ -438,7 +438,7 @@ h3 { font-size: 16px; margin-bottom: 12px; }
 .logs-table { margin-top: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .logs-table table {
   width: 100%;
-  min-width: 700px;
+  min-width: 800px;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -473,8 +473,10 @@ h3 { font-size: 16px; margin-bottom: 12px; }
 .logs-table td:nth-child(5) { width: 55px; min-width: 50px; text-align: center; }
 .logs-table th:nth-child(6), /* 耗时 */
 .logs-table td:nth-child(6) { width: 70px; min-width: 65px; text-align: center; white-space: nowrap; }
-.logs-table th:nth-child(7), /* 消息/操作人 */
-.logs-table td:nth-child(7) { width: auto; }
+.logs-table th:nth-child(7), /* 导入日期 */
+.logs-table td:nth-child(7) { width: 100px; min-width: 90px; white-space: nowrap; }
+.logs-table th:nth-child(8), /* 消息/操作人 */
+.logs-table td:nth-child(8) { width: auto; }
 .log-status { padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
 .log-status.success { background: rgba(34,197,94,0.15); color: var(--success); }
 .log-status.error { background: rgba(239,68,68,0.15); color: var(--error); }

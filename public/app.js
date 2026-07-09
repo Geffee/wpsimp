@@ -1413,7 +1413,7 @@ async function loadLogs() {
       return;
     }
     let html = `<table>
-      <thead><tr><th>时间</th><th>店铺</th><th>表格类型</th><th>行数</th><th>状态</th><th>耗时</th><th>消息</th></tr></thead>
+      <thead><tr><th>时间</th><th>店铺</th><th>表格类型</th><th>行数</th><th>状态</th><th>耗时</th><th>导入日期</th><th>消息</th></tr></thead>
       <tbody>`;
     logs.forEach(l => {
       const time = l.created_at ? new Date(l.created_at + 'Z').toLocaleString('zh-CN') : '-';
@@ -1440,6 +1440,7 @@ async function loadLogs() {
         <td>${l.rows_imported || 0}</td>
         <td><span class="log-status ${l.status}">${l.status === 'success' ? '成功' : '失败'}</span></td>
         <td>${durationHtml}</td>
+        <td>${esc(l.import_time || '-')}</td>
         <td>${esc(l.message || '')}</td>
       </tr>`;
     });

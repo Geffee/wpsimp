@@ -972,8 +972,8 @@ async function handleImport(request, env) {
       if (chunkIndex <= 1) {
         const durationMs = Date.now() - importStartTime;
         await env.DB.prepare(
-          'INSERT INTO import_logs (shop_id, table_type_id, source_file_token, rows_imported, status, message, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        ).bind(shop_id, tt.id, `upload:${mapping.source_sheet_name || mapping.source_sheet_idx}`, importedRows, 'success', `导入${importedRows}行 | 操作人: ${userToken.name}`, durationMs).run();
+          'INSERT INTO import_logs (shop_id, table_type_id, source_file_token, rows_imported, status, message, duration_ms, import_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(shop_id, tt.id, `upload:${mapping.source_sheet_name || mapping.source_sheet_idx}`, importedRows, 'success', `导入${importedRows}行 | 操作人: ${userToken.name}`, durationMs, import_time || '').run();
       }
 
     } catch (e) {
@@ -988,8 +988,8 @@ async function handleImport(request, env) {
         const tt = mapping ? await env.DB.prepare('SELECT * FROM table_types WHERE id = ?').bind(mapping.table_type_id).first() : null;
         const errDurationMs = Date.now() - importStartTime;
         await env.DB.prepare(
-          'INSERT INTO import_logs (shop_id, table_type_id, source_file_token, rows_imported, status, message, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        ).bind(shop_id, tt?.id || 0, 'upload', 0, 'error', `${e.message} | 操作人: ${userToken.name}`, errDurationMs).run();
+          'INSERT INTO import_logs (shop_id, table_type_id, source_file_token, rows_imported, status, message, duration_ms, import_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(shop_id, tt?.id || 0, 'upload', 0, 'error', `${e.message} | 操作人: ${userToken.name}`, errDurationMs, import_time || '').run();
       } catch (_) {}
     }
   }
@@ -1203,6 +1203,7 @@ async function ensureSchema(env) {
     'ALTER TABLE import_logs ADD COLUMN source_start_row INTEGER DEFAULT 0',
     'ALTER TABLE import_logs ADD COLUMN source_start_col INTEGER DEFAULT 0',
     'ALTER TABLE import_logs ADD COLUMN duration_ms INTEGER DEFAULT 0',
+    "ALTER TABLE import_logs ADD COLUMN import_time TEXT DEFAULT ''",
   ];
   for (const m of migrations) {
     try { await env.DB.prepare(m).run(); } catch (e) {}
