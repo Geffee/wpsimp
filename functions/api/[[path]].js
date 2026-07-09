@@ -1190,6 +1190,26 @@ async function handleWpsTest(request, env, subParams) {
 }
 
 // --- 初始化数据库 ---
+// --- 自修复 schema 迁移（幂等，可重复调用，确保新列存在）---
+let _schemaEnsured = false;
+async function ensureSchema(env) {
+  if (_schemaEnsured) return;
+  const migrations = [
+    "ALTER TABLE table_types ADD COLUMN source_file_token TEXT DEFAULT ''",
+    'ALTER TABLE table_types ADD COLUMN start_col INTEGER DEFAULT 0',
+    'ALTER TABLE table_types ADD COLUMN time_col INTEGER DEFAULT -1',
+    "ALTER TABLE table_types ADD COLUMN file_name_prefix TEXT DEFAULT ''",
+    'ALTER TABLE table_types ADD COLUMN start_row INTEGER DEFAULT -1',
+    'ALTER TABLE import_logs ADD COLUMN source_start_row INTEGER DEFAULT 0',
+    'ALTER TABLE import_logs ADD COLUMN source_start_col INTEGER DEFAULT 0',
+    'ALTER TABLE import_logs ADD COLUMN duration_ms INTEGER DEFAULT 0',
+  ];
+  for (const m of migrations) {
+    try { await env.DB.prepare(m).run(); } catch (e) {}
+  }
+  _schemaEnsured = true;
+}
+
 async function handleInitDb(env) {
   const statements = [
     `CREATE TABLE IF NOT EXISTS shops (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, created_at TEXT DEFAULT (datetime('now')))`,
@@ -1259,6 +1279,9 @@ export async function onRequest(context) {
   if (!env.DB) {
     return json({ error: '数据库未绑定，请先配置 D1 数据库。访问 /api/init-db 初始化。' }, 500);
   }
+
+  // 自修复 schema：幂等迁移，确保新列（如 duration_ms）存在，避免导入因缺列报错
+  try { await ensureSchema(env); } catch (e) {}
 
   const path = params.path || [];
   const route = path[0] || '';
