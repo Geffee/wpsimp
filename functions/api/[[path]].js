@@ -283,23 +283,41 @@ async function findLastRow(env, fileId, sheetId, maxRow, scanCol, token = null) 
     accessToken = tokenResult.access_token;
   }
 
-  // 按 maxRow 实际范围扫描（不再硬截断到 10000）
-  // 但至少扫描到 10000 行（兼容 max_row 异常返回 0 的情况）
-  const readRowTo = Math.max(maxRow, 10000);
+  // 起始扫描上限：maxRow 可能偏低（如旧表格返回 16384），至少扫 50000 行
+  // 如果扫描到边界仍有数据，会自动向下扩展
+  let readRowTo = Math.max(maxRow || 0, 50000);
   const BATCH_ROWS = 2000; // 每批最多2000行
   let lastRow = -1;
 
-  for (let batchStart = 0; batchStart <= readRowTo; batchStart += BATCH_ROWS) {
-    const batchEnd = Math.min(batchStart + BATCH_ROWS - 1, readRowTo);
-    // 只读 scanCol 这一列，减少数据量
-    const result = await wpsGetRangeData(accessToken, fileId, sheetId, batchStart, batchEnd, scanCol, scanCol);
-    if (result.code !== 0) continue;
-    const cells = result.data?.range_data || [];
-    for (const cell of cells) {
-      if (cell.cell_text && String(cell.cell_text).trim() !== '') {
-        if (cell.row_from > lastRow) lastRow = cell.row_from;
+  while (true) {
+    let batchStart = 0;
+    // 从上次已知 lastRow 之后开始续扫（避免每次从头）
+    if (lastRow >= 0) batchStart = Math.max(0, lastRow - BATCH_ROWS + 1);
+
+    let foundDataInLastBatch = false;
+    for (; batchStart <= readRowTo; batchStart += BATCH_ROWS) {
+      const batchEnd = Math.min(batchStart + BATCH_ROWS - 1, readRowTo);
+      // 只读 scanCol 这一列，减少数据量
+      const result = await wpsGetRangeData(accessToken, fileId, sheetId, batchStart, batchEnd, scanCol, scanCol);
+      if (result.code !== 0) continue;
+      const cells = result.data?.range_data || [];
+      for (const cell of cells) {
+        if (cell.cell_text && String(cell.cell_text).trim() !== '') {
+          if (cell.row_from > lastRow) lastRow = cell.row_from;
+        }
+      }
+      // 标记最后一批是否有数据（用于判断是否需要扩展扫描）
+      if (batchEnd >= readRowTo && cells.length > 0) {
+        foundDataInLastBatch = true;
       }
     }
+
+    // 如果扫描到当前上限时最后一批还有数据，说明 maxRow 偏低，继续扩展
+    if (foundDataInLastBatch && lastRow >= readRowTo - BATCH_ROWS) {
+      readRowTo += 50000; // 再向下扩展 5 万行
+      continue; // 继续扫描
+    }
+    break; // 边界已无数据或已确认找到末行
   }
 
   return lastRow;
