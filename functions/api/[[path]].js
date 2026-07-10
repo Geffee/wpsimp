@@ -557,8 +557,8 @@ async function handleShops(request, env, subParams) {
         let copiedTypes = 0, copiedMappings = 0;
         for (const tt of tableTypes.results) {
           await env.DB.prepare(
-            'INSERT INTO table_types (shop_id, name, source_file_token, target_file_token, target_sheet_idx, start_col, time_col, file_name_prefix, start_row, source_start_row, source_start_col) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-          ).bind(newShop.id, tt.name, tt.source_file_token || '', tt.target_file_token || '', tt.target_sheet_idx || 0, tt.start_col || 0, tt.time_col != null ? tt.time_col : -1, tt.file_name_prefix || '', tt.start_row != null ? tt.start_row : -1, tt.source_start_row || 0, tt.source_start_col || 0).run();
+            'INSERT INTO table_types (shop_id, name, source_file_token, target_file_token, target_sheet_idx, start_col, time_col, file_name_prefix, start_row, source_start_row, source_start_col, european_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          ).bind(newShop.id, tt.name, tt.source_file_token || '', tt.target_file_token || '', tt.target_sheet_idx || 0, tt.start_col || 0, tt.time_col != null ? tt.time_col : -1, tt.file_name_prefix || '', tt.start_row != null ? tt.start_row : -1, tt.source_start_row || 0, tt.source_start_col || 0, tt.european_number || 0).run();
 
           // 获取新创建的 table_type id
           const newTt = await env.DB.prepare('SELECT * FROM table_types ORDER BY id DESC LIMIT 1').first();
@@ -629,8 +629,8 @@ async function handleTableTypes(request, env, params) {
     const body = await request.json();
     if (!body.name || !body.shop_id) return json({ error: '名称和店铺ID不能为空' }, 400);
     await env.DB.prepare(
-      'INSERT INTO table_types (shop_id, name, source_file_token, target_file_token, target_sheet_idx, start_col, time_col, file_name_prefix, start_row, source_start_row, source_start_col) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(body.shop_id, body.name, body.source_file_token || '', body.target_file_token || '', body.target_sheet_idx || 0, body.start_col || 0, body.time_col != null ? body.time_col : -1, body.file_name_prefix || '', body.start_row != null ? body.start_row : -1, body.source_start_row || 0, body.source_start_col || 0).run();
+      'INSERT INTO table_types (shop_id, name, source_file_token, target_file_token, target_sheet_idx, start_col, time_col, file_name_prefix, start_row, source_start_row, source_start_col, european_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(body.shop_id, body.name, body.source_file_token || '', body.target_file_token || '', body.target_sheet_idx || 0, body.start_col || 0, body.time_col != null ? body.time_col : -1, body.file_name_prefix || '', body.start_row != null ? body.start_row : -1, body.source_start_row || 0, body.source_start_col || 0, body.european_number ? 1 : 0).run();
     const row = await env.DB.prepare('SELECT * FROM table_types ORDER BY id DESC LIMIT 1').first();
     return json(row, 201);
   }
@@ -638,8 +638,8 @@ async function handleTableTypes(request, env, params) {
   if (request.method === 'PUT' && id) {
     const body = await request.json();
     await env.DB.prepare(
-      'UPDATE table_types SET name = ?, source_file_token = ?, target_file_token = ?, target_sheet_idx = ?, start_col = ?, time_col = ?, file_name_prefix = ?, start_row = ?, source_start_row = ?, source_start_col = ? WHERE id = ?'
-    ).bind(body.name || '', body.source_file_token || '', body.target_file_token || '', body.target_sheet_idx || 0, body.start_col || 0, body.time_col != null ? body.time_col : -1, body.file_name_prefix || '', body.start_row != null ? body.start_row : -1, body.source_start_row || 0, body.source_start_col || 0, id).run();
+      'UPDATE table_types SET name = ?, source_file_token = ?, target_file_token = ?, target_sheet_idx = ?, start_col = ?, time_col = ?, file_name_prefix = ?, start_row = ?, source_start_row = ?, source_start_col = ?, european_number = ? WHERE id = ?'
+    ).bind(body.name || '', body.source_file_token || '', body.target_file_token || '', body.target_sheet_idx || 0, body.start_col || 0, body.time_col != null ? body.time_col : -1, body.file_name_prefix || '', body.start_row != null ? body.start_row : -1, body.source_start_row || 0, body.source_start_col || 0, body.european_number ? 1 : 0, id).run();
     return json({ ok: true });
   }
 
@@ -748,6 +748,43 @@ async function handleSheets(request, env, params) {
   }
 
   return json({ error: 'Unknown sheets action' }, 404);
+}
+
+// --- 欧洲数字格式转换 ---
+// 部分国家/地区使用「.」作为千位符、「,」作为小数点，例如：
+//   1.000.000  ->  1000000
+//   11,55%     ->  11.55%
+// 仅在表格类型开启 european_number 时，对单元格字符串做转换。
+function convertEuropeanNumber(val) {
+  if (typeof val !== 'string') return val;
+  const s = val.trim().replace(/\s/g, '');
+  if (s === '') return val;
+  // 必须含数字且至少含一个分隔符，且只能由数字/./,/% 组成
+  if (!/[\d]/.test(s) || !/[.,]/.test(s)) return val;
+  if (!/^[\d.,%]+$/.test(s)) return val;
+
+  let out = s;
+  if (out.includes('.') && out.includes(',')) {
+    // 完整欧洲格式：. 是千位符，, 是小数点
+    out = out.replace(/\./g, '');              // 去掉千位符
+    out = out.replace(/,([^,]*)$/, '.$1');     // 最后一个逗号变小数点
+  } else if (out.includes('.')) {
+    // 只有点：仅当最后一组恰好 3 位、其余每组 1-3 位时，才当作千位符去掉
+    const parts = out.split('.');
+    const last = parts[parts.length - 1].replace('%', '');
+    const ok = /^\d{3}$/.test(last) && parts.slice(0, -1).every(p => /^\d{1,3}$/.test(p));
+    if (!ok) return val; // 不是清晰的千位分组（如 3.5、1.23），保留原值
+    out = out.replace(/\./g, '');
+  } else {
+    // 只有逗号：仅当小数部分 1-2 位时当作小数点（避免误伤 1,000 这类美国千位）
+    const frac = out.split(',').pop().replace('%', '');
+    if (!/^\d{1,2}$/.test(frac)) return val;
+    out = out.replace(/,/g, '.');
+  }
+
+  // 校验结果：纯数字（最多一个小数点）+ 可选尾随 %
+  if (/^[\d.]+%?$/.test(out) && (out.match(/\./g) || []).length <= 1) return out;
+  return val; // 转换后不合法则保留原值
 }
 
 // --- 导入数据 ---
@@ -917,7 +954,9 @@ async function handleImport(request, env) {
         const batchRangeData = [];
         for (let r = batchStart; r < batchEnd; r++) {
           for (let c = 0; c < colCount; c++) {
-            const value = dataRows[r][c];
+            let value = dataRows[r][c];
+            // 欧洲数字格式：开启后将 1.000.000 / 11,55% 这类字符串转换为标准数字
+            if (tt.european_number) value = convertEuropeanNumber(value);
             if (value !== '' && value != null && value !== undefined) {
               batchRangeData.push({
                 op_type: 'cell_operation_type_formula',
@@ -1204,6 +1243,7 @@ async function ensureSchema(env) {
     'ALTER TABLE import_logs ADD COLUMN source_start_col INTEGER DEFAULT 0',
     'ALTER TABLE import_logs ADD COLUMN duration_ms INTEGER DEFAULT 0',
     "ALTER TABLE import_logs ADD COLUMN import_time TEXT DEFAULT ''",
+    'ALTER TABLE table_types ADD COLUMN european_number INTEGER DEFAULT 0',
   ];
   for (const m of migrations) {
     try { await env.DB.prepare(m).run(); } catch (e) {}
@@ -1256,6 +1296,10 @@ async function handleInitDb(env) {
   // 迁移：添加 duration_ms 列（导入执行耗时，毫秒）
   try {
     await env.DB.prepare('ALTER TABLE import_logs ADD COLUMN duration_ms INTEGER DEFAULT 0').run();
+  } catch (e) {}
+  // 迁移：添加 european_number 列（欧洲数字格式开关）
+  try {
+    await env.DB.prepare('ALTER TABLE table_types ADD COLUMN european_number INTEGER DEFAULT 0').run();
   } catch (e) {}
   return json({ ok: true, message: '数据库初始化成功' });
 }

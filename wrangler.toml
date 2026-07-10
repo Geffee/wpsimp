@@ -1,4 +1,4 @@
-name = "wpsimpmoyu2"
+name = "wps-import-site"
 compatibility_date = "2024-12-01"
 pages_build_output_dir = "public"
 
@@ -7,13 +7,13 @@ pages_build_output_dir = "public"
 cpu_ms = 100
 subrequests = 1000
 
-# D1 数据库绑定 — 部署后替换 database_id
+# D1 数据库绑定 — wps-import-site 专用库
 [[d1_databases]]
 binding = "DB"
-database_name = "wpsimpmoyu2-db"
-database_id = "f8d81afc-8115-4459-8e77-c13e77c2343d"
+database_name = "wps-import-db"
+database_id = "2808169d-afaf-457d-a93a-d7f83b07ef1b"
 
-# KV 绑定 — wpsimpmoyu2 独立 KV（binding 名必须为 SITE_KV，与后端 env.SITE_KV 对应）
+# KV 绑定 — 存储密码和站点设置（binding 名必须为 SITE_KV，与后端 env.SITE_KV 对应）
 [[kv_namespaces]]
 binding = "SITE_KV"
-id = "ba72219c3286432daec7f53386379e86"
+id = "17a13e57cc4043ce9d4ee41686ec4606"
