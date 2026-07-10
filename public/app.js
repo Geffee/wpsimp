@@ -959,9 +959,9 @@ async function loadTableTypes(shopId) {
         html += `
           <div class="list-item" style="flex-direction:column;align-items:stretch;cursor:default">
             <div style="display:flex;justify-content:space-between;align-items:center">
-              <span class="list-item-name">${esc(t.name)}</span>
+              <span class="list-item-name">${esc(t.name)}${t.european_number ? ' <span class="tag tag-ok" style="font-size:11px;margin-left:6px">欧洲数字</span>' : ''}</span>
               <div class="list-item-actions">
-                <button class="btn btn-small btn-secondary" onclick="editTableType(${t.id}, '${esc(t.name)}', '${esc(t.target_file_token || '')}', ${t.target_sheet_idx || 0}, ${t.start_col || 0}, ${t.time_col != null ? t.time_col : -1}, '${esc(t.file_name_prefix || '')}', ${t.start_row != null ? t.start_row : -1}, ${t.source_start_row != null ? t.source_start_row : 0}, ${t.source_start_col != null ? t.source_start_col : 0})">编辑</button>
+                <button class="btn btn-small btn-secondary" onclick="editTableType(${t.id}, '${esc(t.name)}', '${esc(t.target_file_token || '')}', ${t.target_sheet_idx || 0}, ${t.start_col || 0}, ${t.time_col != null ? t.time_col : -1}, '${esc(t.file_name_prefix || '')}', ${t.start_row != null ? t.start_row : -1}, ${t.source_start_row != null ? t.source_start_row : 0}, ${t.source_start_col != null ? t.source_start_col : 0}, ${t.european_number ? 1 : 0})">编辑</button>
                 <button class="btn btn-small btn-danger" onclick="deleteTableType(${t.id})">删除</button>
               </div>
             </div>
@@ -1078,6 +1078,12 @@ function addTableType() {
         </div>
         <p class="hint">选择"指定位置"后，可手动填写从第几行开始写入（1=第1行）</p>
       </div>
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="modal-tt-european"> 欧洲数字格式（千分为“.”，小数为“,”）
+        </label>
+        <p class="hint">部分国家数字格式：1.000.000 当作 1000000、11,55% 当作 11.55%，勾选后导入自动转换</p>
+      </div>
       <input type="hidden" id="modal-tt-idx" value="0">
       <input type="hidden" id="modal-tt-sheet-name" value="">
     </div>
@@ -1107,14 +1113,15 @@ async function saveTableType(id) {
   const startRow = rowMode === 0 ? (startRowInput - 1) : -1; // 0=指定位置, -1=自动追加
   const sourceStartRow = (parseInt(document.getElementById('modal-tt-source-start-row')?.value) || 1) - 1; // 1-based → 0-based
   const sourceStartCol = (parseInt(document.getElementById('modal-tt-source-start-col')?.value) || 1) - 1; // 1-based → 0-based
+  const europeanNumber = document.getElementById('modal-tt-european')?.checked ? 1 : 0;
   if (!name) { toast('请输入类型名称', 'error'); return; }
   if (!configState.selectedShopId) { toast('请先选择店铺', 'error'); return; }
 
   try {
     if (id) {
-      await api(`table-types/${id}`, { method: 'PUT', body: { name, target_file_token: token, target_sheet_idx: idx, start_col: startCol, time_col: timeCol, file_name_prefix: prefix, start_row: startRow, source_start_row: sourceStartRow, source_start_col: sourceStartCol } });
+      await api(`table-types/${id}`, { method: 'PUT', body: { name, target_file_token: token, target_sheet_idx: idx, start_col: startCol, time_col: timeCol, file_name_prefix: prefix, start_row: startRow, source_start_row: sourceStartRow, source_start_col: sourceStartCol, european_number: europeanNumber } });
     } else {
-      await api('table-types', { method: 'POST', body: { shop_id: parseInt(configState.selectedShopId), name, target_file_token: token, target_sheet_idx: idx, start_col: startCol, time_col: timeCol, file_name_prefix: prefix, start_row: startRow, source_start_row: sourceStartRow, source_start_col: sourceStartCol } });
+      await api('table-types', { method: 'POST', body: { shop_id: parseInt(configState.selectedShopId), name, target_file_token: token, target_sheet_idx: idx, start_col: startCol, time_col: timeCol, file_name_prefix: prefix, start_row: startRow, source_start_row: sourceStartRow, source_start_col: sourceStartCol, european_number: europeanNumber } });
     }
     closeModal();
     toast('保存成功', 'success');
@@ -1124,7 +1131,7 @@ async function saveTableType(id) {
   }
 }
 
-function editTableType(id, name, token, idx, startCol, timeCol, prefix, startRow, sourceStartRow, sourceStartCol) {
+function editTableType(id, name, token, idx, startCol, timeCol, prefix, startRow, sourceStartRow, sourceStartCol, europeanNumber) {
   const startColDisplay = (startCol || 0) + 1;  // 0-based → 1-based
   const timeColDisplay = timeCol != null && timeCol >= 0 ? (timeCol + 1) : 0;
   const rowMode = (startRow != null && startRow >= 0) ? '0' : '-1';
@@ -1188,6 +1195,12 @@ function editTableType(id, name, token, idx, startCol, timeCol, prefix, startRow
           <input type="number" id="modal-tt-start-row" class="input" value="${startRowDisplay}" min="1" placeholder="行号" style="max-width:100px;${rowMode === '0' ? '' : 'display:none'}">
         </div>
         <p class="hint">选择"指定位置"后，可手动填写从第几行开始写入（1=第1行）</p>
+      </div>
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" id="modal-tt-european" ${europeanNumber ? 'checked' : ''}> 欧洲数字格式（千分为“.”，小数为“,”）
+        </label>
+        <p class="hint">部分国家数字格式：1.000.000 当作 1000000、11,55% 当作 11.55%，勾选后导入自动转换</p>
       </div>
       <input type="hidden" id="modal-tt-idx" value="${idx}">
       <input type="hidden" id="modal-tt-sheet-name" value="">

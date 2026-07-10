@@ -508,3 +508,18 @@ h3 { font-size: 16px; margin-bottom: 12px; }
   .config-left { width: 100%; }
   .modal { min-width: 90%; }
 }
+
+/* ==================== 复选框（表格类型开关，如欧洲数字格式） ==================== */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: normal;
+  cursor: pointer;
+  margin: 0;
+}
+.checkbox-label input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  flex-shrink: 0;
+}
