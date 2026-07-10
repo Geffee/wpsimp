@@ -7,13 +7,8 @@ pages_build_output_dir = "public"
 cpu_ms = 100
 subrequests = 1000
 
-# D1 数据库绑定 — 原来的 wps-import-db（与 wps-import-site 共享同一库）
-[[d1_databases]]
-binding = "DB"
-database_name = "wps-import-db"
-database_id = "2808169d-afaf-457d-a93a-d7f83b07ef1b"
-
-# KV 绑定 — 原来的 SITE_KV（与 wps-import-site 共享同一 KV）
-[[kv_namespaces]]
-binding = "SITE_KV"
-id = "17a13e57cc4043ce9d4ee41686ec4606"
+# ⚠️ D1 / KV 绑定不在此处配置，改为在 Cloudflare Pages 后台手动绑定。
+# 后台路径：Pages 项目 wpsimpmoyu2 → Settings → Bindings（或 Functions → 绑定）
+# 需要配置以下两个绑定（binding 名必须与代码中的 env.DB / env.SITE_KV 严格一致）：
+#   - D1 database：binding 名 = DB      （选择目标数据库，如 wps-import-db）
+#   - KV namespace：binding 名 = SITE_KV （选择目标 KV，如原 SITE_KV）
