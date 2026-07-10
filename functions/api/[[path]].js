@@ -951,7 +951,7 @@ async function handleImport(request, env) {
         const batchRangeData = [];
         for (let r = batchStart; r < batchEnd; r++) {
           for (let c = 0; c < colCount; c++) {
-            const value = dataRows[r][c];
+            let value = dataRows[r][c];
             if (tt.european_number) value = convertEuropeanNumber(value);
             if (value !== '' && value != null && value !== undefined) {
               batchRangeData.push({
