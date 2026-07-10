@@ -67,16 +67,18 @@ function wpsLogin() {
 async function wpsLogout() {
   try {
     await fetch('/api/wps-logout', { method: 'POST' });
+    // 完全清除本地 WPS 授权状态
+    _wpsUser = { logged_in: false, name: '', id: '', avatar: '' };
+    updateLoginUI();
+    toast('已登出，WPS授权已清理', 'info');
+    // 跳转回导入页，确保干净状态
+    location.hash = '#/import';
+  } catch (e) {
+    // 即使请求失败也清除本地状态
     _wpsUser = { logged_in: false };
     updateLoginUI();
-    toast('已登出', 'info');
-    // 如果在导入页，刷新页面状态
-    const hash = (location.hash || '#/import').replace('#/', '');
-    if (hash === 'import' || hash === '') {
-      router();
-    }
-  } catch (e) {
-    toast('登出失败', 'error');
+    location.hash = '#/import';
+    toast('登出失败，但已清除本地状态', 'error');
   }
 }
 
@@ -1079,10 +1081,10 @@ function addTableType() {
         <p class="hint">选择"指定位置"后，可手动填写从第几行开始写入（1=第1行）</p>
       </div>
       <div class="form-group">
-        <label class="checkbox-label">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="modal-tt-european"> 欧洲数字格式（千分为“.”，小数为“,”）
         </label>
-        <p class="hint">部分国家数字格式：1.000.000 当作 1000000、11,55% 当作 11.55%，勾选后导入自动转换</p>
+        <p class="hint">开启后，上传数据中的 1.000.000 → 1000000、11,55% → 11.55% 会自动转换</p>
       </div>
       <input type="hidden" id="modal-tt-idx" value="0">
       <input type="hidden" id="modal-tt-sheet-name" value="">
@@ -1197,10 +1199,10 @@ function editTableType(id, name, token, idx, startCol, timeCol, prefix, startRow
         <p class="hint">选择"指定位置"后，可手动填写从第几行开始写入（1=第1行）</p>
       </div>
       <div class="form-group">
-        <label class="checkbox-label">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
           <input type="checkbox" id="modal-tt-european" ${europeanNumber ? 'checked' : ''}> 欧洲数字格式（千分为“.”，小数为“,”）
         </label>
-        <p class="hint">部分国家数字格式：1.000.000 当作 1000000、11,55% 当作 11.55%，勾选后导入自动转换</p>
+        <p class="hint">开启后，上传数据中的 1.000.000 → 1000000、11,55% → 11.55% 会自动转换</p>
       </div>
       <input type="hidden" id="modal-tt-idx" value="${idx}">
       <input type="hidden" id="modal-tt-sheet-name" value="">
@@ -1424,16 +1426,34 @@ async function loadLogs() {
       return;
     }
     let html = `<table>
-      <thead><tr><th>时间</th><th>店铺</th><th>表格类型</th><th>行数</th><th>状态</th><th>消息</th></tr></thead>
+      <thead><tr><th>时间</th><th>店铺</th><th>表格类型</th><th>行数</th><th>状态</th><th>耗时</th><th>导入日期</th><th>消息</th></tr></thead>
       <tbody>`;
     logs.forEach(l => {
       const time = l.created_at ? new Date(l.created_at + 'Z').toLocaleString('zh-CN') : '-';
+      // 格式化耗时：ms → 可读字符串
+      let durationHtml = '<span class="log-duration">-</span>';
+      if (l.duration_ms > 0) {
+        const ms = l.duration_ms;
+        if (ms < 1000) {
+          durationHtml = `<span class="log-duration fast">${ms}ms</span>`;
+        } else if (ms < 60000) {
+          const sec = (ms / 1000).toFixed(1);
+          const cls = ms < 5000 ? 'fast' : (ms < 15000 ? '' : 'slow');
+          durationHtml = `<span class="log-duration ${cls}">${sec}s</span>`;
+        } else {
+          const min = Math.floor(ms / 60000);
+          const sec = ((ms % 60000) / 1000).toFixed(0);
+          durationHtml = `<span class="log-duration slow">${min}m${sec}s</span>`;
+        }
+      }
       html += `<tr>
         <td>${esc(time)}</td>
         <td>${esc(l.shop_name || '-')}</td>
         <td>${esc(l.table_type_name || '-')}</td>
         <td>${l.rows_imported || 0}</td>
         <td><span class="log-status ${l.status}">${l.status === 'success' ? '成功' : '失败'}</span></td>
+        <td>${durationHtml}</td>
+        <td>${esc(l.import_time || '-')}</td>
         <td>${esc(l.message || '')}</td>
       </tr>`;
     });
@@ -1523,8 +1543,8 @@ function demoApi(path, options = {}) {
   // 表格类型
   if (route === 'table-types') {
     if (method === 'GET') { const sid = q.get('shop_id'); return sid ? DEMO_DB.table_types.filter(t => t.shop_id == sid) : DEMO_DB.table_types; }
-    if (method === 'POST') { const t = { id: _demoNextId++, shop_id: body.shop_id, name: body.name, source_file_token: body.source_file_token || '', target_file_token: body.target_file_token || '', target_sheet_idx: body.target_sheet_idx || 0, start_col: body.start_col || 0, time_col: body.time_col != null ? body.time_col : -1, file_name_prefix: body.file_name_prefix || '', start_row: body.start_row != null ? body.start_row : -1, created_at: now() }; DEMO_DB.table_types.push(t); return t; }
-    if (method === 'PUT' && id) { const t = DEMO_DB.table_types.find(x => x.id == id); if (t) { t.name = body.name; t.source_file_token = body.source_file_token || ''; t.target_file_token = body.target_file_token || ''; t.target_sheet_idx = body.target_sheet_idx || 0; t.start_col = body.start_col || 0; t.time_col = body.time_col != null ? body.time_col : -1; t.file_name_prefix = body.file_name_prefix || ''; t.start_row = body.start_row != null ? body.start_row : -1; } return { ok: true }; }
+    if (method === 'POST') { const t = { id: _demoNextId++, shop_id: body.shop_id, name: body.name, source_file_token: body.source_file_token || '', target_file_token: body.target_file_token || '', target_sheet_idx: body.target_sheet_idx || 0, start_col: body.start_col || 0, time_col: body.time_col != null ? body.time_col : -1, file_name_prefix: body.file_name_prefix || '', start_row: body.start_row != null ? body.start_row : -1, european_number: body.european_number ? 1 : 0, created_at: now() }; DEMO_DB.table_types.push(t); return t; }
+    if (method === 'PUT' && id) { const t = DEMO_DB.table_types.find(x => x.id == id); if (t) { t.name = body.name; t.source_file_token = body.source_file_token || ''; t.target_file_token = body.target_file_token || ''; t.target_sheet_idx = body.target_sheet_idx || 0; t.start_col = body.start_col || 0; t.time_col = body.time_col != null ? body.time_col : -1; t.file_name_prefix = body.file_name_prefix || ''; t.start_row = body.start_row != null ? body.start_row : -1; t.european_number = body.european_number ? 1 : 0; } return { ok: true }; }
     if (method === 'DELETE' && id) { DEMO_DB.table_types = DEMO_DB.table_types.filter(x => x.id != id); DEMO_DB.mappings = DEMO_DB.mappings.filter(m => m.table_type_id != id); return { ok: true }; }
   }
   // 映射

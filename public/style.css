@@ -435,17 +435,54 @@ h3 { font-size: 16px; margin-bottom: 12px; }
 .auth-status.fail { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--error); }
 
 /* ==================== 日志表格 ==================== */
-.logs-table { margin-top: 12px; overflow-x: auto; }
-.logs-table table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.logs-table { margin-top: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.logs-table table {
+  width: 100%;
+  min-width: 800px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.logs-table thead { position: sticky; top: 0; z-index: 1; }
 .logs-table th, .logs-table td {
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   text-align: left;
+  vertical-align: middle;
 }
-.logs-table th { color: var(--text-secondary); font-weight: 500; }
-.log-status { padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+.logs-table th {
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: none;
+  white-space: nowrap;
+  background: var(--bg-tertiary);
+  position: sticky;
+  top: 0;
+}
+.logs-table td { font-size: 13px; }
+/* 列宽分配 */
+.logs-table th:nth-child(1), /* 时间 */
+.logs-table td:nth-child(1) { width: 150px; min-width: 140px; }
+.logs-table th:nth-child(2), /* 店铺 */
+.logs-table td:nth-child(2) { width: 100px; min-width: 80px; }
+.logs-table th:nth-child(3), /* 表格类型 */
+.logs-table td:nth-child(3) { width: 110px; min-width: 90px; white-space: nowrap; }
+.logs-table th:nth-child(4), /* 行数 */
+.logs-table td:nth-child(4) { width: 60px; min-width: 50px; text-align: center; }
+.logs-table th:nth-child(5), /* 状态 */
+.logs-table td:nth-child(5) { width: 55px; min-width: 50px; text-align: center; }
+.logs-table th:nth-child(6), /* 耗时 */
+.logs-table td:nth-child(6) { width: 70px; min-width: 65px; text-align: center; white-space: nowrap; }
+.logs-table th:nth-child(7), /* 导入日期 */
+.logs-table td:nth-child(7) { width: 100px; min-width: 90px; white-space: nowrap; }
+.logs-table th:nth-child(8), /* 消息/操作人 */
+.logs-table td:nth-child(8) { width: auto; }
+.log-status { padding: 2px 8px; border-radius: 4px; font-size: 12px; white-space: nowrap; }
 .log-status.success { background: rgba(34,197,94,0.15); color: var(--success); }
 .log-status.error { background: rgba(239,68,68,0.15); color: var(--error); }
+.log-duration { color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.log-duration.fast { color: var(--success); }
+.log-duration.slow { color: var(--warning); }
 
 /* ==================== 弹窗 ==================== */
 .modal-overlay {
@@ -507,19 +544,4 @@ h3 { font-size: 16px; margin-bottom: 12px; }
   .config-layout { flex-direction: column; }
   .config-left { width: 100%; }
   .modal { min-width: 90%; }
-}
-
-/* ==================== 复选框（表格类型开关，如欧洲数字格式） ==================== */
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: normal;
-  cursor: pointer;
-  margin: 0;
-}
-.checkbox-label input[type="checkbox"] {
-  width: auto;
-  margin: 0;
-  flex-shrink: 0;
 }

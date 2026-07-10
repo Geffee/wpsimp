@@ -750,10 +750,11 @@ async function handleSheets(request, env, params) {
   return json({ error: 'Unknown sheets action' }, 404);
 }
 
-// --- 导入数据 ---
-// 仅在表格类型开启 european_number 时，对单元格字符串做转换。
+// --- 欧洲数字格式转换 ---
+// 部分国家/地区使用「.」作为千位符、「,」作为小数点，例如：
 //   1.000.000  ->  1000000
 //   11,55%     ->  11.55%
+// 仅在表格类型开启 european_number 时，对单元格字符串做转换。
 function convertEuropeanNumber(val) {
   if (typeof val !== 'string') return val;
   const s = val.trim().replace(/\s/g, '');
@@ -786,6 +787,7 @@ function convertEuropeanNumber(val) {
   return val; // 转换后不合法则保留原值
 }
 
+// --- 导入数据 ---
 // 请求体: { shop_id, items: [{ mapping_id, headers: [], dataRows: [[],...] }] }
 // 前端解析上传的文件后，将每个子表的数据连同mapping_id一起发送
 async function handleImport(request, env) {
@@ -809,6 +811,7 @@ async function handleImport(request, env) {
     return json({ error: '没有要导入的数据' }, 400);
   }
 
+  const importStartTime = Date.now();
   const results = [];
 
   for (const item of items) {
@@ -952,6 +955,7 @@ async function handleImport(request, env) {
         for (let r = batchStart; r < batchEnd; r++) {
           for (let c = 0; c < colCount; c++) {
             let value = dataRows[r][c];
+            // 欧洲数字格式：开启后将 1.000.000 / 11,55% 这类字符串转换为标准数字
             if (tt.european_number) value = convertEuropeanNumber(value);
             if (value !== '' && value != null && value !== undefined) {
               batchRangeData.push({
@@ -1003,11 +1007,12 @@ async function handleImport(request, env) {
         last_row: startRow + importedRows - 1,
       });
 
-      // 记录日志（含操作人身份）；分块导入时仅首块写一条，避免刷屏
+      // 记录日志（含操作人身份 + 执行耗时）；分块导入时仅首块写一条，避免刷屏
       if (chunkIndex <= 1) {
+        const durationMs = Date.now() - importStartTime;
         await env.DB.prepare(
-          'INSERT INTO import_logs (shop_id, table_type_id, source_file_token, rows_imported, status, message) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(shop_id, tt.id, `upload:${mapping.source_sheet_name || mapping.source_sheet_idx}`, importedRows, 'success', `导入${importedRows}行 | 操作人: ${userToken.name}`).run();
+          'INSERT INTO import_logs (shop_id, table_type_id, source_file_token, rows_imported, status, message, duration_ms, import_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(shop_id, tt.id, `upload:${mapping.source_sheet_name || mapping.source_sheet_idx}`, importedRows, 'success', `导入${importedRows}行 | 操作人: ${userToken.name}`, durationMs, import_time || '').run();
       }
 
     } catch (e) {
@@ -1020,9 +1025,10 @@ async function handleImport(request, env) {
       try {
         const mapping = await env.DB.prepare('SELECT * FROM sub_table_mappings WHERE id = ?').bind(item.mapping_id).first();
         const tt = mapping ? await env.DB.prepare('SELECT * FROM table_types WHERE id = ?').bind(mapping.table_type_id).first() : null;
+        const errDurationMs = Date.now() - importStartTime;
         await env.DB.prepare(
-          'INSERT INTO import_logs (shop_id, table_type_id, source_file_token, rows_imported, status, message) VALUES (?, ?, ?, ?, ?, ?)'
-        ).bind(shop_id, tt?.id || 0, 'upload', 0, 'error', `${e.message} | 操作人: ${userToken.name}`).run();
+          'INSERT INTO import_logs (shop_id, table_type_id, source_file_token, rows_imported, status, message, duration_ms, import_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(shop_id, tt?.id || 0, 'upload', 0, 'error', `${e.message} | 操作人: ${userToken.name}`, errDurationMs, import_time || '').run();
       } catch (_) {}
     }
   }
@@ -1223,6 +1229,28 @@ async function handleWpsTest(request, env, subParams) {
 }
 
 // --- 初始化数据库 ---
+// --- 自修复 schema 迁移（幂等，可重复调用，确保新列存在）---
+let _schemaEnsured = false;
+async function ensureSchema(env) {
+  if (_schemaEnsured) return;
+  const migrations = [
+    "ALTER TABLE table_types ADD COLUMN source_file_token TEXT DEFAULT ''",
+    'ALTER TABLE table_types ADD COLUMN start_col INTEGER DEFAULT 0',
+    'ALTER TABLE table_types ADD COLUMN time_col INTEGER DEFAULT -1',
+    "ALTER TABLE table_types ADD COLUMN file_name_prefix TEXT DEFAULT ''",
+    'ALTER TABLE table_types ADD COLUMN start_row INTEGER DEFAULT -1',
+    'ALTER TABLE import_logs ADD COLUMN source_start_row INTEGER DEFAULT 0',
+    'ALTER TABLE import_logs ADD COLUMN source_start_col INTEGER DEFAULT 0',
+    'ALTER TABLE import_logs ADD COLUMN duration_ms INTEGER DEFAULT 0',
+    "ALTER TABLE import_logs ADD COLUMN import_time TEXT DEFAULT ''",
+    'ALTER TABLE table_types ADD COLUMN european_number INTEGER DEFAULT 0',
+  ];
+  for (const m of migrations) {
+    try { await env.DB.prepare(m).run(); } catch (e) {}
+  }
+  _schemaEnsured = true;
+}
+
 async function handleInitDb(env) {
   const statements = [
     `CREATE TABLE IF NOT EXISTS shops (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, created_at TEXT DEFAULT (datetime('now')))`,
@@ -1260,10 +1288,14 @@ async function handleInitDb(env) {
   } catch (e) {}
   // 迁移：添加 source_start_row 和 source_start_col 列（源文件读取起始位置）
   try {
-    await env.DB.prepare('ALTER TABLE table_types ADD COLUMN source_start_row INTEGER DEFAULT 0').run();
+    await env.DB.prepare('ALTER TABLE import_logs ADD COLUMN source_start_row INTEGER DEFAULT 0').run();
   } catch (e) {}
   try {
-    await env.DB.prepare('ALTER TABLE table_types ADD COLUMN source_start_col INTEGER DEFAULT 0').run();
+    await env.DB.prepare('ALTER TABLE import_logs ADD COLUMN source_start_col INTEGER DEFAULT 0').run();
+  } catch (e) {}
+  // 迁移：添加 duration_ms 列（导入执行耗时，毫秒）
+  try {
+    await env.DB.prepare('ALTER TABLE import_logs ADD COLUMN duration_ms INTEGER DEFAULT 0').run();
   } catch (e) {}
   // 迁移：添加 european_number 列（欧洲数字格式开关）
   try {
@@ -1292,6 +1324,9 @@ export async function onRequest(context) {
   if (!env.DB) {
     return json({ error: '数据库未绑定，请先配置 D1 数据库。访问 /api/init-db 初始化。' }, 500);
   }
+
+  // 自修复 schema：幂等迁移，确保新列（如 duration_ms）存在，避免导入因缺列报错
+  try { await ensureSchema(env); } catch (e) {}
 
   const path = params.path || [];
   const route = path[0] || '';
