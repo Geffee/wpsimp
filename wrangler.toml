@@ -7,13 +7,13 @@ pages_build_output_dir = "public"
 cpu_ms = 100
 subrequests = 1000
 
-# D1 数据库绑定 — 独立新库（原 wps-import-db 的拷贝）
+# D1 数据库绑定 — 原来的 wps-import-db（与 wps-import-site 共享同一库）
 [[d1_databases]]
 binding = "DB"
-database_name = "wpsimpmoyu2-db"
-database_id = "f8d81afc-8115-4459-8e77-c13e77c2343d"
+database_name = "wps-import-db"
+database_id = "2808169d-afaf-457d-a93a-d7f83b07ef1b"
 
-# KV 绑定 — 独立新 KV（原 SITE_KV 的拷贝）
+# KV 绑定 — 原来的 SITE_KV（与 wps-import-site 共享同一 KV）
 [[kv_namespaces]]
 binding = "SITE_KV"
-id = "ba72219c3286432daec7f53386379e86"
+id = "17a13e57cc4043ce9d4ee41686ec4606"
