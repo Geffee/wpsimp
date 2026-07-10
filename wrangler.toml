@@ -8,11 +8,12 @@ cpu_ms = 100
 subrequests = 1000
 
 # D1 / KV 绑定（Cloudflare 后台锁定为"通过 wrangler.toml 管理"，必须在此处配置）
+# 使用 wpsimpmoyu2 项目专属的独立库（与 wps-import-site 隔离）
 [[d1_databases]]
 binding = "DB"
-database_name = "wps-import-db"
-database_id = "2808169d-afaf-457d-a93a-d7f83b07ef1b"
+database_name = "wpsimpmoyu2-db"
+database_id = "f8d81afc-8115-4459-8e77-c13e77c2343d"
 
 [[kv_namespaces]]
 binding = "SITE_KV"
-id = "17a13e57cc4043ce9d4ee41686ec4606"
+id = "ba72219c3286432daec7f53386379e86"
