@@ -10,10 +10,10 @@ subrequests = 1000
 # D1 数据库绑定 — wps-import-site 专用库
 [[d1_databases]]
 binding = "DB"
-database_name = "wps-import-db"
-database_id = "2808169d-afaf-457d-a93a-d7f83b07ef1b"
+database_name = "wpsimpmoyu2-db"
+database_id = "f8d81afc-8115-4459-8e77-c13e77c2343d"
 
 # KV 绑定 — 存储密码和站点设置（binding 名必须为 SITE_KV，与后端 env.SITE_KV 对应）
 [[kv_namespaces]]
-binding = "SITE_KV"
-id = "17a13e57cc4043ce9d4ee41686ec4606"
+binding = "wpsimpmoyu2-kv"
+id = "ba72219c3286432daec7f53386379e86"
